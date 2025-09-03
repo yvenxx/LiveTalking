@@ -5,47 +5,99 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>WebRTC webcam</title>
     <style>
-    button {
-        padding: 8px 16px;
+    body {
+        margin: 0;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        background: #000;
+        /* Add a play button overlay for better UX */
+        position: relative;
+    }
+
+    #hidden-elements {
+        display: none;
     }
 
     video {
-        width: 100%;
-    }
-
-    .option {
-        margin-bottom: 8px;
+        width: 100vw;
+        height: 100vh;
+        object-fit: contain;
     }
 
     #media {
-        max-width: 1280px;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
     }
-    </style>
+
+    #asr-container {
+        position: fixed;
+        bottom: 90px;
+        right: 20px;
+        width: 300px;
+        height: 400px;
+        z-index: 1000;
+    }
+
+    #asr-frame {
+        width: 100%;
+        height: 100%;
+    }
+
+    #success-message {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: #4CAF50;
+        color: white;
+        padding: 15px 30px;
+        border-radius: 5px;
+        display: none;
+        z-index: 1000;
+        font-family: Arial, sans-serif;
+        font-size: 18px;
+        font-weight: bold;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+
+        </style>
 </head>
 <body>
 
-<div class="option">
-    <input id="use-stun" type="checkbox"/>
-    <label for="use-stun">Use STUN server</label>
-</div>
-<button class="btn btn-primary" id="btn_play">Start</button>
-<input type="hidden" id="sessionid" value="0">
-
-<form class="form-inline" id="echo-form">
-    <div class="form-group">
-      <p>input text</p>
-
-      <textarea cols="2" rows="3" style="width:600px;height:50px;" class="form-control" id="message">test</textarea>
+<div id="hidden-elements">
+    <div class="option">
+        <input id="use-stun" type="checkbox"/>
+        <label for="use-stun">Use STUN server</label>
     </div>
-    <button type="submit" class="btn btn-default">Send</button>
-  </form>
+    <button class="btn btn-primary" id="btn_play">Start</button>
+    <input type="hidden" id="sessionid" value="0">
+
+    <form class="form-inline" id="echo-form">
+        <div class="form-group">
+        <p>input text</p>
+
+        <textarea cols="2" rows="3" style="width:600px;height:50px;" class="form-control" id="message">test</textarea>
+        </div>
+        <button type="submit" class="btn btn-default">Send</button>
+    </form>
+</div>
 
 <div id="media">
-    <h2>Media</h2>
-
-    <video id="rtc_media_player" style="width:600px;" controls autoplay></video>
+    <video id="rtc_media_player" controls autoplay playsinline muted></video>
 </div>
-<iframe src="asr/index.html" width="600" height="500"></iframe>
+
+<div id="success-message">数字人启动成功</div>
+
+<div id="asr-container">
+    <iframe id="asr-frame" src="asr/index.html"></iframe>
+</div>
+
 
 <script src="srs.sdk.js"></script>
 <script type="text/javascript" src="http://cdn.sockjs.org/sockjs-0.3.4.js"></script>
@@ -54,24 +106,6 @@
 <script type="text/javascript" charset="utf-8">
 
 	$(document).ready(function() {
-	  // var host = window.location.hostname
-	  // var ws = new WebSocket("ws://"+host+":8000/humanecho");
-	  // //document.getElementsByTagName("video")[0].setAttribute("src", aa["video"]);
-	  // ws.onopen = function() {
-		// console.log('Connected');
-	  // };
-	  // ws.onmessage = function(e) {
-		// console.log('Received: ' + e.data);
-		// data = e
-		// var vid = JSON.parse(data.data); 
-		// console.log(typeof(vid),vid)
-		// //document.getElementsByTagName("video")[0].setAttribute("src", vid["video"]);
-		
-	  // };
-	  // ws.onclose = function(e) {
-		// console.log('Closed');
-	  // };
-
 	  $('#echo-form').on('submit', function(e) {
       e.preventDefault();
       var message = $('#message').val();
@@ -86,7 +120,6 @@
             },
             method: 'POST'
       });
-      //ws.send(message);
       $('#message').val('');
 	  });
 	});
@@ -105,6 +138,8 @@
         // User should set the stream when publish is done, @see https://webrtc.org/getting-started/media-devices
         // However SRS SDK provides a consist API like https://webrtc.org/getting-started/remote-streams
         $('#rtc_media_player').prop('srcObject', sdk.stream);
+        // Keep the video muted initially to comply with autoplay policies
+        $('#rtc_media_player').prop('muted', true);
         // Optional callback, SDK will add track to stream.
         // sdk.ontrack = function (event) { console.log('Got track', event); sdk.stream.addTrack(event.track); };
 
@@ -114,6 +149,36 @@
         sdk.play(url).then(function(session){
             //$('#sessionid').html(session.sessionid);
             //$('#simulator-drop').attr('href', session.simulator + '?drop=1&username=' + session.sessionid);
+            // Show success message with a slight delay to ensure it's visible
+            setTimeout(function() {
+                $('#success-message').show();
+            }, 500);
+            // Force video to play - handle browser autoplay restrictions
+            setTimeout(function() {
+                var video = $('#rtc_media_player')[0];
+                // Try to play the video
+                var playPromise = video.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(function() {
+                        // Video played successfully
+                        console.log("Video is playing");
+                        // Gradually unmute the video after it starts playing
+                        setTimeout(function() {
+                            video.muted = false;
+                        }, 1000);
+                    }).catch(function(error) {
+                        // Auto-play was prevented
+                        console.log("Auto-play failed:", error);
+                        // Force play and unmute
+                        video.muted = false;
+                        video.play();
+                    });
+                }
+            }, 300);
+            // Hide success message after 3 seconds
+            setTimeout(function() {
+                $('#success-message').fadeOut();
+            }, 3000);
         }).catch(function (reason) {
             sdk.close();
             $('#rtc_media_player').hide();
@@ -122,17 +187,10 @@
     };
 
     $('#rtc_media_player').hide();
-    // var query = parse_query_string();
-    // srs_init_whep("#txt_url", query);
-
-    $("#btn_play").click(startPlay);
-    // Never play util windows loaded @see https://github.com/ossrs/srs/issues/2732
-    // if (query.autostart === 'true') {
-    //     $('#rtc_media_player').prop('muted', true);
-    //     console.warn('For autostart, we should mute it, see https://www.jianshu.com/p/c3c6944eed5a ' +
-    //         'or https://developers.google.com/web/updates/2017/09/autoplay-policy-changes#audiovideo_elements');
-    //     window.addEventListener("load", function(){ startPlay(); });
-    // }
+    // Auto-start on page load
+    $(document).ready(function() {
+        startPlay();
+    });
 });
 </script>
 </html>
