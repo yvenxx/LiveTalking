@@ -9,9 +9,40 @@ function WebSocketConnectMethod( config ) { //定义socket连接方法类
 	
 	var speechSokt;
 	var connKeeperID;
+	var self = this; // 保存this引用
 	
 	var msgHandle = config.msgHandle;
 	var stateHandle = config.stateHandle;
+	
+	// 添加检查连接状态的方法
+	this.isConnected = function() {
+		return speechSokt && speechSokt.readyState === 1; // 1: OPEN
+	};
+	
+	// 添加心跳机制保持连接
+	function startHeartbeat() {
+		if (connKeeperID) {
+			clearInterval(connKeeperID);
+		}
+		connKeeperID = setInterval(function() {
+			if (self.isConnected()) {
+				// 发送心跳包
+				try {
+					speechSokt.send(JSON.stringify({type: "heartbeat"}));
+				} catch(e) {
+					console.log("Heartbeat send error:", e);
+				}
+			}
+		}, 30000); // 每30秒发送一次心跳
+	}
+	
+	// 停止心跳机制
+	function stopHeartbeat() {
+		if (connKeeperID) {
+			clearInterval(connKeeperID);
+			connKeeperID = null;
+		}
+	}
 			  
 	this.wsStart = function () {
 		var Uri = document.getElementById('wssip').value; //"wss://111.205.137.58:5821/wss/" //设置wss asr online接口地址 如 wss://X.X.X.X:port/wss/
@@ -64,6 +95,9 @@ function WebSocketConnectMethod( config ) { //定义socket连接方法类
 	
 	// SOCEKT连接中的消息与状态响应
 	function onOpen( e ) {
+		// 启动心跳机制保持连接
+		startHeartbeat();
+		
 		// 发送json
 		var chunk_size = new Array( 5, 10, 5 );
 		var request = {
@@ -99,6 +133,8 @@ function WebSocketConnectMethod( config ) { //定义socket连接方法类
 	}
 	
 	function onClose( e ) {
+		// 停止心跳机制
+		stopHeartbeat();
 		stateHandle(1);
 	}
 	
@@ -109,6 +145,8 @@ function WebSocketConnectMethod( config ) { //定义socket连接方法类
 	
 	function onError( e ) {
  
+		// 停止心跳机制
+		stopHeartbeat();
 		info_div.innerHTML="连接"+e;
 		console.log(e);
 		stateHandle(2);

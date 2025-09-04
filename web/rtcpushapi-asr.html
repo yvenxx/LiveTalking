@@ -66,6 +66,46 @@
         box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     }
 
+    #audio-toggle {
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        background: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 50px;
+        padding: 15px 20px;
+        font-size: 16px;
+        cursor: pointer;
+        z-index: 1000;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+
+    #audio-toggle:hover {
+        background: #45a049;
+    }
+
+    #sound-enable {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 10px;
+        padding: 20px 30px;
+        font-size: 18px;
+        cursor: pointer;
+        z-index: 2000;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        display: none;
+    }
+
+    #sound-enable:hover {
+        background: #45a049;
+    }
+
         </style>
 </head>
 <body>
@@ -89,13 +129,15 @@
 </div>
 
 <div id="media">
-    <video id="rtc_media_player" controls autoplay playsinline muted></video>
+    <video id="rtc_media_player" controls autoplay playsinline></video>
 </div>
 
 <div id="success-message">数字人启动成功</div>
 
+<button id="audio-toggle" style="display: none;">🔊 开启声音</button>
+
 <div id="asr-container">
-    <iframe id="asr-frame" src="asr/index.html"></iframe>
+    <iframe id="asr-frame" src="about:blank" sandbox="allow-scripts allow-same-origin"></iframe>
 </div>
 
 
@@ -121,6 +163,18 @@
             method: 'POST'
       });
       $('#message').val('');
+	  });
+
+	  // Audio toggle functionality
+	  $('#audio-toggle').on('click', function() {
+	    var video = $('#rtc_media_player')[0];
+	    if (video.muted) {
+	      video.muted = false;
+	      $(this).text('🔇 关闭声音');
+	    } else {
+	      video.muted = true;
+	      $(this).text('🔊 开启声音');
+	    }
 	  });
 	});
 
@@ -161,16 +215,47 @@
                 if (playPromise !== undefined) {
                     playPromise.then(function() {
                         // Video played successfully
-                        console.log("Video is playing");
-                        // Gradually unmute the video after it starts playing
+                        console.log("Video is playing muted");
+                        // 视频稳定播放后，再加载ASR iframe
                         setTimeout(function() {
-                            video.muted = false;
-                        }, 1000);
+                            $('#asr-frame').attr('src', 'asr/index.html');
+                        }, 2000);
+                        
+                        // Auto-unmute strategy
+                        var tryUnmute = function() {
+                            if (video.muted) {
+                                video.muted = false;
+                                console.log("Attempted to unmute video");
+                                
+                                // Check if unmuting caused pause, if so re-mute
+                                setTimeout(function() {
+                                    if (video.paused) {
+                                        video.muted = true;
+                                        video.play();
+                                        console.log("Re-muted and resumed playback");
+                                    } else {
+                                        console.log("Successfully unmuted and playing");
+                                        // Remove listeners once successful
+                                        $(document).off('touchstart touchmove orientationchange visibilitychange');
+                                    }
+                                }, 100);
+                            }
+                        };
+                        
+                        // Try auto-click unmute after 500ms
+                        setTimeout(function() {
+                            tryUnmute();
+                        }, 500);
+                        
+                        // Setup listeners for touch interactions
+                        $(document).one('touchstart touchmove orientationchange visibilitychange', function() {
+                            setTimeout(tryUnmute, 100);
+                        });
+                        
                     }).catch(function(error) {
-                        // Auto-play was prevented
+                        // Auto-play was prevented, try with muted
                         console.log("Auto-play failed:", error);
-                        // Force play and unmute
-                        video.muted = false;
+                        video.muted = true;
                         video.play();
                     });
                 }

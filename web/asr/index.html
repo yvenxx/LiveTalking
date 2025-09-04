@@ -15,13 +15,18 @@
 		<div class="div_class_topArea">
 
 			<div class="div_class_recordControl">
+				<!-- 隐藏ASR服务器地址 -->
+				<div style="display:none;">
 				asr服务器地址(必填):
 				<br>
 				<input id="wssip" type="text" onchange="addresschange()" style=" width: 100%;height:100%" value="ws://192.168.101.2:10095/"/>
 				<br>
 				<a id="wsslink"  href="#" onclick="window.open('https://127.0.0.1:10095/', '_blank')"><div id="info_wslink">点此处手工授权wss://127.0.0.1:10095/</div></a>
 				<br>
-			<br>  
+				</div>
+				<br>  
+			<!-- 隐藏录音模式选择 -->
+			<div style="display:none;">
 			<div  style="border:2px solid #ccc;">
 				选择录音模式:<br/>
     
@@ -29,8 +34,11 @@
         <label><input name="recoder_mode" onclick="on_recoder_mode_change()" type="radio" value="file" />文件 </label> 
 
 				</div>
+			</div>
 				
 				<br>
+				<!-- 隐藏ASR模型模式选择 -->
+				<div style="display:none;">
 				 <div id="mic_mode_div" style="border:2px solid #ccc;display:block;">
 				选择asr模型模式:<br/>
     
@@ -39,26 +47,33 @@
       <label><input name="asr_mode" type="radio" value="offline" />offline </label>
 
 				</div>
+				</div>
 				
+				<!-- 隐藏文件上传 -->
+				<div style="display:none;">
 				<div id="rec_mode_div" style="border:2px solid #ccc;display:none;">
 		 
     
 		          <input type="file" id="upfile">
 
 				</div>
+				</div>
 				<br>
+				<!-- 隐藏逆文本标准化设置 -->
+				<div style="display:none;">
 				<div id="use_itn_div" style="border:2px solid #ccc;display:block;">
 					逆文本标准化(ITN):<br/>
 					<label><input name="use_itn" type="radio" value="false" checked="true"/>否 </label>&nbsp;&nbsp;
 					<label><input name="use_itn" type="radio" value="true" />是 </label>
 			   </div>
+			   </div>
 			   <br>
-		        <div  style="border:2px solid #ccc;">
+		        <div  style="border:2px solid #ccc;display:none;">
 					热词设置(一行一个关键字，空格隔开权重,如"阿里巴巴 20")：
 					<br>
 	
 	
-					<textarea rows="3"  id="varHot"  style=" width: 100%;height:100%" >阿里巴巴 20&#13;hello world 40</textarea>
+					<textarea rows="3"  id="varHot"  style=" width: 100%;height:100%" >数字化 20</textarea>
 					<br>
 	
 					</div>
@@ -75,7 +90,7 @@
  
 				</div>
                 
-				<audio id="audio_record" type="audio/wav" controls style="margin-top: 12px; width: 100%;"></audio>
+				<audio id="audio_record" type="audio/wav" controls autoplay style="margin-top: 12px; width: 100%;" preload="auto"></audio>
 			</div>
 		</div>
 

@@ -31,6 +31,10 @@ btnStart.disabled = true;
  
 btnConnect= document.getElementById('btnConnect');
 btnConnect.onclick = start;
+// 禁用自动连接，避免与视频播放冲突
+btnConnect.disabled = false;
+btnStart.disabled = true;
+btnStop.disabled = true;
 
 var awsslink= document.getElementById('wsslink');
 
@@ -58,6 +62,7 @@ var totalsend=0;
 // now_ipaddress=now_ipaddress.replace(localport,"10095");
 // document.getElementById('wssip').value=now_ipaddress;
 addresschange();
+
 function addresschange()
 {   
 	
@@ -185,11 +190,40 @@ upfile.onchange = function () {
 
 function play_file()
 {
-		  var audioblob=new Blob( [ new Uint8Array(file_data_array)] , {type :"audio/wav"});
-		  var audio_record = document.getElementById('audio_record');
-		  audio_record.src =  (window.URL||webkitURL).createObjectURL(audioblob); 
-          audio_record.controls=true;
-		  //audio_record.play();  //not auto play
+	  var audioblob=new Blob( [ new Uint8Array(file_data_array)] , {type :"audio/wav"});
+	  var audio_record = document.getElementById('audio_record');
+	  audio_record.src =  (window.URL||webkitURL).createObjectURL(audioblob); 
+      audio_record.controls=true;
+	  
+	  // 移除之前可能添加的事件监听器，避免重复
+	  audio_record.onplay = null;
+	  audio_record.onended = null;
+	  audio_record.onerror = null;
+	  
+	  // 添加事件监听器来处理播放状态
+	  audio_record.addEventListener('play', function() {
+		  console.log("Audio playback started");
+		  info_div.innerHTML="正在播放音频...";
+	  });
+	  
+	  audio_record.addEventListener('ended', function() {
+		  console.log("Audio playback finished");
+		  info_div.innerHTML="音频播放完成";
+	  });
+	  
+	  audio_record.addEventListener('error', function(e) {
+		  console.log("Audio playback error:", e);
+		  info_div.innerHTML="音频播放出错，请检查文件格式";
+	  });
+	  
+	  // 尝试自动播放，如果失败则需要用户手动点击播放
+	  setTimeout(function() {
+		  audio_record.play().catch(function(error) {
+			  console.log("Auto-play failed:", error);
+			  // 在界面上提示用户需要手动点击播放
+			  info_div.innerHTML="文件识别完成，请点击播放按钮播放音频";
+		  });
+	  }, 100); // 延迟100ms播放，确保音频资源加载完成
 }
 function start_file_send()
 {
@@ -197,7 +231,7 @@ function start_file_send()
  
 		var chunk_size=960; // for asr chunk_size [5, 10, 5]
  
-
+ 
  
 		
  
@@ -212,9 +246,9 @@ function start_file_send()
 		}
  
 		stop();
-
  
-
+ 
+ 
 }
  
 	
@@ -228,7 +262,7 @@ function on_recoder_mode_change()
 					break;
                 }
 		    
-
+ 
            }
 		    if(item=="mic")
 			{
@@ -255,7 +289,7 @@ function on_recoder_mode_change()
 	 
 			}
 }
-
+ 
 
 function getHotwords(){
 	
@@ -287,7 +321,7 @@ function getHotwords(){
 
 }
 function getAsrMode(){
-
+ 
             var item = null;
             var obj = document.getElementsByName("asr_mode");
             for (var i = 0; i < obj.length; i++) { //遍历Radio 
@@ -296,7 +330,7 @@ function getAsrMode(){
 					break;
                 }
 		    
-
+ 
            }
             if(isfilemode)
 			{
@@ -361,24 +395,39 @@ async function is_speaking() {
 }
 
 async function waitSpeakingEnd() {
-	rec.stop() //关闭录音
+	// 不关闭录音，保持连接状态
 	for(let i=0;i<10;i++) {  //等待数字人开始讲话，最长等待10s
-		bspeak = await is_speaking()
-		if(bspeak) {
+		try {
+			bspeak = await is_speaking()
+			if(bspeak) {
+				break
+			}
+		} catch(e) {
+			console.log("Error checking speaking status:", e)
 			break
 		}
 		await sleep(1000)
 	}
 
 	while(true) {  //等待数字人讲话结束
-		bspeak = await is_speaking()
-		if(!bspeak) {
+		try {
+			bspeak = await is_speaking()
+			if(!bspeak) {
+				break
+			}
+		} catch(e) {
+			console.log("Error checking speaking status:", e)
 			break
 		}
 		await sleep(1000)
 	}
+	// 保持WebSocket连接，不关闭录音
 	await sleep(2000)
-	rec.start() 
+	// 确保连接仍然活跃
+	if (!wsconnecter.isConnected()) {
+		console.log("WebSocket disconnected, attempting to reconnect...")
+		start()
+	}
 }
 // 语音识别结果; 对jsonMsg数据解析,将识别结果附加到编辑框中
 function getJsonMessage( jsonMsg ) {
@@ -402,13 +451,31 @@ function getJsonMessage( jsonMsg ) {
                 'Content-Type': 'application/json'
             },
             method: 'POST'
-      	});
+      	}).then(response => {
+			// 确保连接保持活跃
+			if (!wsconnecter.isConnected()) {
+				console.log("WebSocket disconnected after fetch, attempting to reconnect...")
+				start()
+			}
+		}).catch(error => {
+			console.log("Error sending message to human endpoint:", error)
+		});
 
 		waitSpeakingEnd();
 	}
 	else
 	{
-		rec_text=rec_text+rectxt; //.replace(/ +/g,"");
+		// 检查是否是最终识别结果
+		if (is_final == true) {
+			// 如果是最终结果，累加到rec_text并重置临时变量
+			rec_text = rec_text + rectxt; //.replace(/ +/g,"");
+			// 可以在这里添加处理最终结果的代码
+		} else {
+			// 如果不是最终结果，只是临时显示
+			var varArea=document.getElementById('varArea');
+			varArea.value = rec_text + rectxt; //.replace(/ +/g,"");
+			return; // 不继续执行下面的代码
+		}
 	}
 	var varArea=document.getElementById('varArea');
 	
@@ -418,16 +485,26 @@ function getJsonMessage( jsonMsg ) {
 	if (isfilemode==true && is_final==true){
 		console.log("call stop ws!");
 		play_file();
-		wsconnecter.wsStop();
+		// 不再关闭WebSocket连接，保持连接状态
+		// wsconnecter.wsStop();
         
-		info_div.innerHTML="请点击连接";
+		info_div.innerHTML="文件识别完成";
  
 		btnStart.disabled = true;
 		btnStop.disabled = true;
 		btnConnect.disabled=false;
 	}
 	
-	 
+	// 确保WebSocket连接保持活跃
+	if (!wsconnecter.isConnected()) {
+		console.log("WebSocket disconnected in getJsonMessage, attempting to reconnect...")
+		// 不立即重新连接，而是在稍后重试
+		setTimeout(function() {
+			if (!wsconnecter.isConnected()) {
+				start()
+			}
+		}, 1000)
+	}
  
 }
 
@@ -435,6 +512,7 @@ function getJsonMessage( jsonMsg ) {
 function getConnState( connState ) {
 	if ( connState === 0 ) { //on open
  
+
  
 		info_div.innerHTML='连接成功!请点击开始';
 		if (isfilemode==true){
@@ -465,7 +543,8 @@ function getConnState( connState ) {
 
 function record()
 {
- 
+	isRec = true; // 确保设置录音状态为true
+	clear(); // 清除之前的识别结果
 		 rec.open( function(){
 		 rec.start();
 		 console.log("开始");
@@ -486,26 +565,37 @@ function start() {
 	//控件状态更新
  	console.log("isfilemode"+isfilemode);
     
-	//启动连接
-	var ret=wsconnecter.wsStart();
-	// 1 is ok, 0 is error
-	if(ret==1){
-		info_div.innerHTML="正在连接asr服务器，请等待...";
+	//检查连接状态，如果已经连接则直接开始，否则启动连接
+	if(wsconnecter.isConnected()) {
+		info_div.innerHTML="已连接asr服务器";
 		isRec = true;
 		btnStart.disabled = true;
-		btnStop.disabled = true;
+		btnStop.disabled = false;
 		btnConnect.disabled=true;
  
         return 1;
-	}
-	else
-	{
-		info_div.innerHTML="请点击开始";
-		btnStart.disabled = true;
-		btnStop.disabled = true;
-		btnConnect.disabled=false;
- 
-		return 0;
+	} else {
+		//启动连接
+		var ret=wsconnecter.wsStart();
+		// 1 is ok, 0 is error
+		if(ret==1){
+			info_div.innerHTML="正在连接asr服务器，请等待...";
+			isRec = true;
+			btnStart.disabled = true;
+			btnStop.disabled = true;
+			btnConnect.disabled=true;
+	 
+			return 1;
+		}
+		else
+		{
+			info_div.innerHTML="请点击开始";
+			btnStart.disabled = true;
+			btnStop.disabled = true;
+			btnConnect.disabled=false;
+	 
+			return 0;
+		}
 	}
 }
 
@@ -529,27 +619,25 @@ function stop() {
  
 	  
 	
-	 
 
  
 	// 控件状态更新
 	
 	isRec = false;
     info_div.innerHTML="发送完数据,请等候,正在识别...";
-
+ 
    if(isfilemode==false){
 	    btnStop.disabled = true;
-		btnStart.disabled = true;
+		btnStart.disabled = false; // 允许重新开始录音
 		btnConnect.disabled=true;
-		//wait 3s for asr result
+		// 不再关闭WebSocket连接，保持连接状态
+		// 3s后更新提示信息
 	  setTimeout(function(){
-		console.log("call stop ws!");
-		wsconnecter.wsStop();
-		btnConnect.disabled=false;
-		info_div.innerHTML="请点击连接";}, 3000 );
+		info_div.innerHTML="识别完成，点击开始进行下一次录音";}, 3000 );
  
  
 	   
+	// 不完全停止录音，而是暂停录音以保持连接
 	rec.stop(function(blob,duration){
   
 		console.log(blob);
@@ -559,24 +647,60 @@ function stop() {
 		var audio_record = document.getElementById('audio_record');
 		audio_record.src =  (window.URL||webkitURL).createObjectURL(theblob); 
         audio_record.controls=true;
-		//audio_record.play(); 
+		
+		// 移除之前可能添加的事件监听器，避免重复
+		audio_record.onplay = null;
+		audio_record.onended = null;
+		audio_record.onerror = null;
+		
+		// 添加事件监听器来处理播放状态
+		audio_record.addEventListener('play', function() {
+			console.log("Audio playback started");
+			info_div.innerHTML="正在播放录音...";
+		});
+		
+		audio_record.addEventListener('ended', function() {
+			console.log("Audio playback finished");
+			info_div.innerHTML="录音播放完成";
+		});
+		
+		audio_record.addEventListener('error', function(e) {
+			console.log("Audio playback error:", e);
+			info_div.innerHTML="录音播放出错";
+		});
+		
+		// 尝试自动播放，如果失败则需要用户手动点击播放
+		setTimeout(function() {
+			audio_record.play().catch(function(error) {
+				console.log("Auto-play failed:", error);
+				info_div.innerHTML="录音已完成，请点击播放按钮播放";
+			});
+		}, 100); // 延迟100ms播放，确保音频资源加载完成
          	
-
+ 
 	}   ,function(msg){
 		 console.log(msg);
 	}
 		);
  
-
+ 
  
 	},function(errMsg){
 		console.log("errMsg: " + errMsg);
 	});
+   } else {
+	   // 文件模式下不需要录音处理，但需要保持WebSocket连接
+	   console.log("File mode: keeping WebSocket connection alive");
    }
-    // 停止连接
+    // 保持WebSocket连接活跃，不完全关闭连接
+	// 只在必要时重新连接，而不是完全断开
+	if (!wsconnecter.isConnected()) {
+		console.log("WebSocket disconnected in stop function");
+		// 可以选择在这里重新连接，但我们保持连接状态
+	}
  
-    
-
+	
+ 
 }
 
 function clear() {
@@ -609,8 +733,8 @@ function recProcess( buffer, powerLevel, bufferDuration, bufferSampleRate,newBuf
 		 
 		}
 		
- 
 		
+ 
 	}
 }
 
